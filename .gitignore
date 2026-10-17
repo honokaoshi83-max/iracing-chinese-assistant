@@ -42,3 +42,5 @@ config/race-strategy.json
 **/review_state.json
 **/review_status.json
 **/manual_speech_active.json
+work/race-voices/app_owner.json
+work/race-voices/app_owner.tmp

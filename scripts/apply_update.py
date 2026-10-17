@@ -2,7 +2,7 @@
 import argparse,hashlib,json,os,re,shutil,subprocess,tempfile,time,uuid,zipfile
 from pathlib import Path,PurePosixPath
 
-PRIVATE={'status_button_settings.json','playback_settings.json','tire_settings.json','emotion_settings.json','voices.json','voice_library.json','voice_import_request.json','review_state.json','review_status.json','manual_speech_active.json'}
+PRIVATE={'status_button_settings.json','playback_settings.json','tire_settings.json','emotion_settings.json','voices.json','voice_library.json','voice_import_request.json','review_state.json','review_status.json','manual_speech_active.json','app_owner.json'}
 BLOCKED=('.runtime/','.updates/','复盘/','work/race-voices/models/','work/race-voices/cache/','work/race-voices/GPT-SoVITS/','work/race-voices/samples/')
 
 def digest(data):return hashlib.sha256(data).hexdigest()
@@ -116,7 +116,9 @@ def main():
         else:
             result=apply(root,args.bundle,before=before);message=('已是最新版本。' if result['state']=='already_current' else '更新完成。备份目录：'+result['backup'])
     except Exception as error:code=1;message='更新未完成：'+str(error)+'。请查看备份或重新运行更新器。'
-    if running[0]:
+    # New deployments bind services to the desktop; the installer reopens it.
+    # Preserve legacy restoration only when updating an older deployment.
+    if running[0] and not (root/'work/race-voices/app_lifecycle.py').exists():
         try:subprocess.run(['powershell','-NoProfile','-ExecutionPolicy','Bypass','-File',str(root/'scripts/start.ps1')],cwd=root/'work/race-voices',check=True,timeout=40,creationflags=getattr(subprocess,'CREATE_NO_WINDOW',0))
         except Exception:message+=' 后台未能自动恢复，请在助手首页启动播报。'
     if not code and not args.check and os.name=='nt':

@@ -14,18 +14,18 @@
 
 首页中部的“Simulator Controller 安装引导”可一键下载官方组件、准备基础配置并接入中文语音。安装过程显示模拟进度，任务仍在运行时不会显示 100%。完成后点击“重新检测”，再重启播报助手；失败详情保存在安装目录的 `logs/simulator-install.log`。
 
-启动播报后，语音引擎就绪时自动启动已完成安装与中文接入的 Simulator Controller。已运行的组件直接复用。停止播报时只关闭助手自动启动的实例及其配套子进程，手动打开的实例保留；窗口收起到托盘时播报继续运行，组件也保持运行。
+打开应用时自动启动语音组件，语音引擎就绪后启动已完成安装与中文接入的 Simulator Controller。首页仍可手动停止、重新启动播报。只管理本部署启动的组件；独立手动运行的 Simulator Controller 不会被误杀。
 
 诊断页显示安装目录、语音地址、实际健康状态以及日志末尾，便于定位问题。复制诊断时请自行确认其中的个人目录信息。
 
-关闭窗口会收起到托盘，右键托盘可停止播报或退出界面。退出界面保留已运行的后台。界面单实例，避免重复学习按键。
+关闭窗口会收起到托盘，此时应用仍在运行。右键托盘选择“退出应用并关闭组件”，会关闭本部署的语音、遥测、守护进程和配套 Simulator Controller。应用异常结束时，守护进程检测到应用已退出后也会清理组件。应用未运行时不能单独通过启动脚本拉起后台；没有添加 Windows 开机自启动项。界面单实例。
 
 ## 构建
 
 在独立 Python 环境安装 `requirements-desktop-build.txt`，再运行：
 
 ```powershell
-python -m PyInstaller --noconfirm --clean --windowed --onedir --hidden-import backports.tarfile --icon app/assets/app-icon.ico --name iracing-assistant --paths app app/main.py
+python -m PyInstaller --noconfirm --clean --windowed --onedir --hidden-import backports.tarfile --icon app/assets/app-icon.ico --name iracing-assistant --paths app --paths work/race-voices app/main.py
 ```
 
 Qt/PySide6 按 LGPLv3 等适用条款分发。目录版保留动态 Qt 库、上游许可和替换动态库的可能性；程序未使用商业 Qt 许可。第三方 Qt/PySide6 许可原文需随构建包保留。

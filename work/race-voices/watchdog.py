@@ -8,10 +8,12 @@ import time
 
 import psutil
 import requests
+from app_lifecycle import owner_alive
 
 ROOT = Path(__file__).resolve().parent
 from runtime_settings import service_url, settings, instance_id
 STOP = ROOT/'watchdog.stop'
+OWNER_TOKEN = None
 
 class RecoveryPolicy:
     def __init__(self):
@@ -55,7 +57,7 @@ def log(event, **data):
         f.write(json.dumps(dict(time=time.strftime('%Y-%m-%d %H:%M:%S'),event=event,**data))+'\n')
 
 def launch(script, prefix, extra=()):
-    if STOP.exists():
+    if STOP.exists() or not owner_alive(ROOT, OWNER_TOKEN):
         return
     with (ROOT/(prefix+'.log')).open('a',encoding='utf-8') as out, (ROOT/(prefix+'-error.log')).open('a',encoding='utf-8') as err:
         p = subprocess.Popen([sys.executable,'-X','utf8',str(ROOT/script),*extra], cwd=ROOT,
@@ -76,7 +78,23 @@ def port_occupied():
     return any(c.laddr and c.laddr.port==settings()['port'] and c.status=='LISTEN'
                for c in psutil.net_connections(kind='tcp'))
 
-def main():
+
+def stop_children():
+    """Only this deployment's parsed script paths; never a foreign Python."""
+    from simulator_link import SimulatorLink
+    log('simulator_controller_stop', result=SimulatorLink().stop())
+    for script in ('telemetry_announcer.py', 'bridge.py'):
+        for process in processes(script):
+            try:
+                process.terminate(); process.wait(timeout=5)
+            except psutil.NoSuchProcess:
+                pass
+            except psutil.TimeoutExpired:
+                process.kill(); process.wait(timeout=3)
+
+def main(owner_token):
+    global OWNER_TOKEN
+    OWNER_TOKEN = owner_token
     import msvcrt
     # The OS releases this lock if the supervisor exits unexpectedly.
     with (ROOT/'watchdog.lock').open('a+b') as lock:
@@ -91,7 +109,7 @@ def main():
         previous=None
         from simulator_link import SimulatorLink
         simulator=SimulatorLink()
-        while not STOP.exists():
+        while not STOP.exists() and owner_alive(ROOT, OWNER_TOKEN):
             try:
                 state={}
                 for script,policy in policies.items():
@@ -105,7 +123,7 @@ def main():
                     if policy.due(healthy,time.monotonic()):
                         policy.attempted(time.monotonic())
                         # A foreign listener must never be killed or replaced.
-                        if STOP.exists():
+                        if STOP.exists() or not owner_alive(ROOT, OWNER_TOKEN):
                             break
                         for p in owned:
                             try:
@@ -119,7 +137,7 @@ def main():
                         else:
                             launch(script,'telemetry')
                 try:
-                    state['simulator_controller']=simulator.ensure(state.get('bridge.py')=='healthy' and not STOP.exists())
+                    state['simulator_controller']=simulator.ensure(state.get('bridge.py')=='healthy' and not STOP.exists() and owner_alive(ROOT, OWNER_TOKEN))
                 except Exception as e:
                     state['simulator_controller']='launch_failed'
                     state['simulator_controller_error']=str(e)[:150]
@@ -132,9 +150,13 @@ def main():
             except Exception as e:
                 log('check_error',type=type(e).__name__)
             time.sleep(2)
-        log('simulator_controller_stop',result=simulator.stop())
+        STOP.write_text('desktop exited or manual stop', encoding='utf-8')
+        stop_children()
         (ROOT/'watchdog_status.json').write_text(json.dumps({'state':'stopped','services':{}}),encoding='utf-8')
         log('stopped')
 
 if __name__=='__main__':
-    main()
+    import argparse
+    parser=argparse.ArgumentParser()
+    parser.add_argument('--owner-token', required=True)
+    main(parser.parse_args().owner_token)

@@ -8,6 +8,8 @@ from PySide6.QtWidgets import (QApplication,QMainWindow,QWidget,QVBoxLayout,QHBo
     QPushButton,QListWidget,QStackedWidget,QFrame,QSlider,QTableWidget,QTableWidgetItem,QHeaderView,
     QPlainTextEdit,QSystemTrayIcon,QMenu,QMessageBox,QComboBox,QScrollArea,QLayout,QSizeGrip)
 from backend import Backend,atomic_json
+if not getattr(sys,'frozen',False):sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'work/race-voices'))
+from app_lifecycle import claim, release
 from PySide6.QtNetwork import QLocalServer,QLocalSocket
 
 STYLE='''
@@ -127,7 +129,7 @@ class Window(QMainWindow):
         self.build_home();self.build_strategy();self.build_voices();self.build_reviews();self.build_diagnostics();self.nav.setCurrentRow(0)
         bottom=QHBoxLayout();bottom.setContentsMargins(0,0,4,3);bottom.addStretch();bottom.addWidget(QSizeGrip(self));shell.addLayout(bottom)
         self.tray=QSystemTrayIcon(icon(backend.project),self);self.tray.setToolTip('iracing中文播报助手');menu=QMenu()
-        menu.addAction('显示窗口',self.show_window);menu.addAction('检查更新',self.open_updates);menu.addAction('停止播报',lambda:self.run_ps('stop'));menu.addSeparator();menu.addAction('退出界面（保留后台）',self.quit_ui)
+        menu.addAction('显示窗口',self.show_window);menu.addAction('检查更新',self.open_updates);menu.addAction('停止播报',lambda:self.run_ps('stop'));menu.addSeparator();menu.addAction('退出应用并关闭组件',self.quit_ui)
         self.tray.setContextMenu(menu);self.tray.activated.connect(lambda reason:self.show_window() if reason==QSystemTrayIcon.DoubleClick else None);self.tray.show()
         self.timer=QTimer(self);self.timer.timeout.connect(self.tick);self.timer.start(400);self.tick()
 
@@ -201,6 +203,7 @@ class Window(QMainWindow):
         self.job.finished.connect(self.job_done);self.job.errorOccurred.connect(lambda error:self.notify('任务启动失败，请检查运行环境。'));self.job.start();return True
 
     def run_ps(self,name,extra=None):
+        if getattr(self,'closing',False):return
         path=self.backend.script(name)
         if not path.exists():self.notify('未找到安装工具：'+str(path));return
         self.start_process('powershell.exe',['-NoProfile','-ExecutionPolicy','Bypass','-File',str(path),*(extra or [])],name)
@@ -239,7 +242,7 @@ class Window(QMainWindow):
             self.binding_result.setText(text or '绑定任务已结束。');self.bind_button.setEnabled(True);self.cancel_button.setEnabled(False)
         self.diag.appendPlainText(f'\n任务 {self.job_kind}，退出码 {code}\n'+text[-5000:]);self.footer.setText('任务完成' if code==0 else '任务失败，请查看诊断日志')
         self.job=None
-        if self.job_kind=='stop' and getattr(self,'restart_after_stop',False):
+        if not self.closing and self.job_kind=='stop' and getattr(self,'restart_after_stop',False):
             self.restart_after_stop=False
             if code==0:self.run_ps('start')
     def notify(self,text):self.footer.setText(text)
@@ -296,12 +299,26 @@ class Window(QMainWindow):
         if not self.closing:event.ignore();self.hide();self.tray.showMessage('iracing中文播报助手','窗口已收起到托盘，后台继续运行。')
         else:event.accept()
     def quit_ui(self):
+        if self.closing:return
         if self.job and self.job_kind=='binding':self.cancel_bind()
-        self.closing=True;self.timer.stop();self.pool.shutdown(wait=False,cancel_futures=True);self.tray.hide();QApplication.quit()
+        self.closing=True;self.timer.stop();self.pool.shutdown(wait=False,cancel_futures=True)
+        owner=getattr(self,'service_owner',None)
+        if not owner:self.finish_quit();return
+        release(self.backend.root,owner)
+        # Stop independently of an in-flight cache/start/binding task.
+        self.setEnabled(False);self.footer.setText('正在关闭语音和 Simulator Controller 组件……')
+        self.shutdown_job=QProcess(self)
+        self.shutdown_job.finished.connect(lambda *_:self.finish_quit())
+        self.shutdown_job.errorOccurred.connect(lambda *_:self.finish_quit())
+        self.shutdown_job.start(str(self.backend.python),['-X','utf8',str(self.backend.root/'stop_services.py')])
+        QTimer.singleShot(35000,self.finish_quit)
+
+    def finish_quit(self):
+        self.tray.hide();QApplication.quit()
 
 def main():
     parser=argparse.ArgumentParser();default=Path(sys.executable).parent if getattr(sys,'frozen',False) else Path(__file__).resolve().parents[1]
-    parser.add_argument('--project-dir',default=str(default));parser.add_argument('--backend-dir');parser.add_argument('--smoke-test',action='store_true');parser.add_argument('--install-simulator',action='store_true');args=parser.parse_args()
+    parser.add_argument('--project-dir',default=str(default));parser.add_argument('--backend-dir');parser.add_argument('--smoke-test',action='store_true');parser.add_argument('--install-simulator',action='store_true');parser.add_argument('--quit',action='store_true');args=parser.parse_args()
     app=QApplication(sys.argv[:1])
     # Load installed system fonts; fonts are not redistributed with this app.
     if sys.platform=='win32':
@@ -313,18 +330,26 @@ def main():
     app.setWindowIcon(icon(backend.project))
     key='iracing-assistant-'+hashlib.sha256(str(backend.root).encode()).hexdigest()[:16]
     client=QLocalSocket();client.connectToServer(key)
-    if client.waitForConnected(300):client.write(b'install\n' if args.install_simulator else b'show\n');client.flush();client.waitForBytesWritten(300);return 0
+    if client.waitForConnected(300):client.write(b'quit\n' if args.quit else (b'install\n' if args.install_simulator else b'show\n'));client.flush();client.waitForBytesWritten(300);return 0
+    if args.quit:return 0
     server=QLocalServer();QLocalServer.removeServer(key)
     if not server.listen(key):return 1
     window=Window(backend)
+    if not args.smoke_test:
+        window.service_owner=claim(backend.root)
+        app.aboutToQuit.connect(lambda:release(backend.root,window.service_owner))
+        QTimer.singleShot(0,lambda:window.run_ps('start'))
     def install():
         window.show_window();window.open_simulator_guide();window.simulator_guide.install_and_connect()
     def receive():
         connection=server.nextPendingConnection()
         def dispatch():
             if not connection.canReadLine():return
-            command=bytes(connection.readLine()).strip();window.show_window()
-            if command==b'install':install()
+            command=bytes(connection.readLine()).strip()
+            if command==b'quit':window.quit_ui()
+            else:
+                window.show_window()
+                if command==b'install':install()
             connection.disconnectFromServer();connection.deleteLater()
         connection.readyRead.connect(dispatch)
         if connection.bytesAvailable():dispatch()
