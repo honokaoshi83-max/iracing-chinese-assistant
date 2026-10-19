@@ -25,7 +25,7 @@ assert binding.get('device') is None and binding.get('button') is None
 for name in ('local.json',):
     assert not (target/'config'/name).exists(),name
 private=('driver_numbers.json','component_speech_priority.json','opening_active.json',
-         'voice_library.json','voice_import_request.json','playback_settings.json','simulator_controller_owner.json','app_owner.json')
+         'voice_library.json','voice_import_request.json','playback_settings.json','simulator_controller_owner.json','app_owner.json','local_playback.json')
 assert not any((target/'work/race-voices'/name).exists() for name in private)
 manifest=[]
 for name in files+['iracing-assistant.exe','config/default.json','work/race-voices/status_button_settings.json']:

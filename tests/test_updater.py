@@ -61,7 +61,7 @@ class PatchTests(unittest.TestCase):
         hook.assert_not_called()
 
     def test_traversal_and_private_paths_are_rejected(self):
-        for name in ('../outside','C:/outside','config/local.json','config/race-strategy.json','config/RACE-STRATEGY.JSON','复盘/history.txt','work/race-voices/review_state.json','work/race-voices/review_native_events.JSONL','work/race-voices/voices.json','work/race-voices/VOICES.JSON','work/race-voices/cache/x.wav','.runtime/python/x.py','work/CON','work/file.'):
+        for name in ('../outside','C:/outside','config/local.json','config/race-strategy.json','config/RACE-STRATEGY.JSON','复盘/history.txt','work/race-voices/review_state.json','work/race-voices/local_playback.json','work/race-voices/review_native_events.JSONL','work/race-voices/voices.json','work/race-voices/VOICES.JSON','work/race-voices/cache/x.wav','.runtime/python/x.py','work/CON','work/file.'):
             with self.subTest(name=name):
                 with self.assertRaises(ValueError):apply_update.apply(self.root,self.bundle((name,b'evil',None)))
         self.assertFalse((self.root.parent/'outside').exists())
@@ -84,6 +84,37 @@ class PatchTests(unittest.TestCase):
         self.assertEqual(json.loads((self.root/'config/offline-bundle.json').read_text())['version'],'0.2.4')
 
 class ClientTests(unittest.TestCase):
+    def test_check_searches_next_page_and_sorts_compatible_versions(self):
+        newer=dict(self.release(),tag_name='v0.2.7',assets=[])
+        first=Mock();first.json.return_value=[newer]*100
+        second=Mock();second.json.return_value=[self.release()]
+        with tempfile.TemporaryDirectory() as d,patch('update_client.requests.get',side_effect=[first,second]) as request:
+            root=Path(d);(root/'config').mkdir();(root/'config/offline-bundle.json').write_text('{"version":"0.2.4"}')
+            result=update_client.check(root)
+        self.assertEqual(result['latest'],'0.2.6');self.assertEqual(result['newest_release'],'0.2.7')
+        self.assertEqual(request.call_args_list[1].kwargs['params']['page'],2)
+
+    def test_check_finds_compatible_patch_when_latest_release_has_only_full_installer(self):
+        newer=dict(self.release(),tag_name='v0.2.7',assets=[dict(name='iracing-chinese-assistant-0.2.7-setup.exe',size=9)])
+        response=Mock();response.json.return_value=[newer,self.release()]
+        with tempfile.TemporaryDirectory() as d,patch('update_client.requests.get',return_value=response):
+            root=Path(d);(root/'config').mkdir();(root/'config/offline-bundle.json').write_text('{"version":"0.2.4"}')
+            result=update_client.check(root)
+        self.assertEqual(result['latest'],'0.2.6');self.assertIsNotNone(result['asset'])
+
+    def test_download_rejects_full_installer_even_when_called_directly(self):
+        asset=dict(self.release()['assets'][0],name='iracing-chinese-assistant-0.2.6-setup.exe')
+        with tempfile.TemporaryDirectory() as d,patch('update_client.requests.get') as request:
+            with self.assertRaises(ValueError):update_client.download(asset,Path(d))
+        request.assert_not_called()
+
+    def test_check_ignores_preview_releases_and_uses_highest_compatible_version(self):
+        newest=dict(self.release(),tag_name='v0.2.9',prerelease=True)
+        response=Mock();response.json.return_value=[self.release(),newest]
+        with tempfile.TemporaryDirectory() as d,patch('update_client.requests.get',return_value=response):
+            result=update_client.check(Path(d))
+        # This installation has no version metadata; do not invent a matching patch.
+        self.assertIsNone(result['asset']);self.assertEqual(result['latest'],'0.2.6')
     def setUp(self):self.assertIsNotNone(update_client,'Online update client is missing')
 
     def release(self):

@@ -1,6 +1,6 @@
 """Enforce the two spoken roles at the shared synthesis boundary."""
 def route_voice(text,requested):
-    if text=='本次复盘已经保存。' or text.startswith('本次计时赛记录'):return 'furina'
+    if text in ('本次复盘已经保存。','复盘文本已保存，请进入软件查看。') or text.startswith('本次计时赛记录'):return 'furina'
     if text.startswith('我是芙宁娜') or text.startswith('本圈'):return 'furina'
     if text.startswith('我是克洛琳德'):return 'clorinde'
     if any(word in text for word in ('通讯按钮','车辆无告警','当前车辆状态','剩余油量','当前进站服务',

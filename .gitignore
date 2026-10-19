@@ -44,3 +44,5 @@ config/race-strategy.json
 **/manual_speech_active.json
 work/race-voices/app_owner.json
 work/race-voices/app_owner.tmp
+**/local_playback.json
+**/local_playback.tmp

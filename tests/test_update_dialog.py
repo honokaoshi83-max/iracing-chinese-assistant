@@ -22,7 +22,7 @@ class DialogTests(unittest.TestCase):
         self.assertTrue(self.window.install_button.isEnabled());self.assertIn('1.0 MB',self.window.status.text())
     def test_missing_patch_does_not_offer_full_package_as_increment(self):
         self.result(dict(state='available',latest='0.2.6',notes='',asset=None))
-        self.assertFalse(self.window.install_button.isEnabled());self.assertIn('发布页',self.window.status.text())
+        self.assertFalse(self.window.install_button.isEnabled());self.assertIn('不下载完整安装包',self.window.status.text())
     def test_driving_blocks_installation(self):
         self.window.release={'asset':{'size':1}};self.window.can_apply=lambda:False
         self.window.install();self.assertIsNone(self.window.future);self.assertIn('驾驶会话',self.window.status.text())

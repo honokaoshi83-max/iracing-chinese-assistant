@@ -6,6 +6,7 @@ import requests
 
 REPO='honokaoshi83-max/iracing-chinese-assistant'
 API='https://api.github.com/repos/'+REPO+'/releases/latest'
+RELEASES_API='https://api.github.com/repos/'+REPO+'/releases'
 PAGE='https://github.com/'+REPO+'/releases/latest'
 MAX_DOWNLOAD=256*1024*1024
 
@@ -37,11 +38,28 @@ def select_release(release,current):
     return result
 
 def check(project):
-    response=requests.get(API,timeout=(5,15),headers={'Accept':'application/vnd.github+json','User-Agent':'iRacing-Chinese-Assistant'})
-    response.raise_for_status()
-    return select_release(response.json(),current_version(project))
+    releases=[]
+    for page in range(1,11):
+        response=requests.get(RELEASES_API,params={'per_page':100,'page':page},timeout=(5,15),headers={'Accept':'application/vnd.github+json','User-Agent':'iRacing-Chinese-Assistant'})
+        response.raise_for_status();rows=response.json()
+        if not isinstance(rows,list):raise ValueError('GitHub发行记录格式无效')
+        releases.extend(row for row in rows if isinstance(row,dict) and not row.get('draft') and not row.get('prerelease') and re.fullmatch(r'v?\d+\.\d+\.\d+',str(row.get('tag_name',''))))
+        if len(rows)<100:break
+    else:raise ValueError('发行记录较多，尚未完成补丁检查，请稍后重试')
+    if not releases:raise ValueError('GitHub暂未提供正式发行记录')
+    releases.sort(key=lambda row:version(row['tag_name']),reverse=True)
+    current=current_version(project)
+    newest=select_release(releases[0],current)
+    for release in releases:
+        if version(release['tag_name'])<=version(current):break
+        result=select_release(release,current)
+        if result['asset']:
+            result['newest_release']=newest['latest']
+            return result
+    return newest
 
 def download(asset,folder,progress=lambda percent:None):
+    if not re.fullmatch(r'iracing-chinese-assistant-\d+\.\d+\.\d+-update-from-\d+\.\d+\.\d+\.exe',str(asset.get('name',''))):raise ValueError('只允许下载匹配版本的更新补丁，不下载完整安装包')
     if not trusted(asset['browser_download_url']) or not re.fullmatch(r'[A-Za-z0-9._-]+\.exe',asset['name']):raise ValueError('更新文件地址无效')
     folder=Path(folder);folder.mkdir(parents=True,exist_ok=True)
     target=folder/asset['name'];temporary=target.with_suffix('.part')

@@ -182,9 +182,17 @@ class SoVITSEngine:
         return data
 
 def create_app(service):
-    from fastapi import FastAPI, HTTPException, Response
+    from fastapi import FastAPI, HTTPException, Response, Request
     from pydantic import BaseModel, Field
     app = FastAPI(title='Local Race Voices')
+    @app.middleware('http')
+    async def finish_component_request(http_request,call_next):
+        try:return await call_next(http_request)
+        finally:
+            token=getattr(http_request.state,'component_priority_token',None)
+            if token:
+                from opening_sequence import complete_component_request
+                complete_component_request(token)
     class SpeechRequest(BaseModel):
         model: str = 'gpt-sovits'
         voice: str
@@ -196,6 +204,7 @@ def create_app(service):
         flag: bool = False
         review: bool = False
         manual: bool = False
+        local: bool = False
     @app.get('/health')
     def health():
         return {'status':'ready', 'voices':list(service.voices), 'device':'cpu', 'instance':instance_id(), 'engine':settings()['engine'],
@@ -207,7 +216,7 @@ def create_app(service):
     def voices():
         return {'voices':['gpt-sovits/'+voice for voice in service.voices]}
     @app.post('/v1/audio/speech')
-    def speech(request: SpeechRequest):
+    def speech(request: SpeechRequest,http_request: Request):
         if request.model != 'gpt-sovits':
             raise HTTPException(400, 'Use model gpt-sovits')
         from opening_sequence import native_greeting,silent_audio,opening_active,split_opening_state
@@ -218,16 +227,16 @@ def create_app(service):
         suppressed=not request.opening and (native_greeting(request.input) or
                     (opening_active() and split_opening_state(request.input)) or
                     (not request.flag and managed() and native_flag(request.input)))
-        suppressed=suppressed or save_prompt
-        if not request.opening and not request.manual:
+        suppressed=suppressed or review_phrase is not None
+        if not request.opening and not request.manual and not request.local:
             from opening_sequence import record_component_priority
-            record_component_priority(request.input,suppressed)
+            http_request.state.component_priority_token=record_component_priority(request.input,suppressed,pending=not suppressed)
         with (ROOT/'speech_requests.jsonl').open('a',encoding='utf-8') as record:
             from voice_routing import route_voice
             record.write(json.dumps({'time':time.strftime('%Y-%m-%d %H:%M:%S'),
                 'voice':request.voice,'text':request.input,'opening':request.opening,'flag':request.flag,'manual':request.manual,
                 'effective_voice':route_voice(request.input,request.voice),
-                'action':'suppressed_review_save_prompt' if save_prompt else 'suppressed_opening_duplicate' if suppressed else 'speech_request'},ensure_ascii=False)+'\n')
+                'action':'suppressed_review' if review_phrase is not None else 'suppressed_opening_duplicate' if suppressed else 'speech_request'},ensure_ascii=False)+'\n')
         if suppressed:
             if request.voice not in service.voices:
                 raise HTTPException(400,'Unknown voice')
@@ -267,6 +276,11 @@ def create_app(service):
         if request.response_format=='wav':
             from wav_playback import finalize_wav
             data=finalize_wav(data)
+        from emotion_profiles import classify as delivery_class
+        if not (request.local or request.manual or request.opening or request.review or safety or delivery_class(request.input)=='warning'):
+            from local_playback import active
+            from button_priority import manual_active
+            while active(ROOT) or manual_active(ROOT):time.sleep(.03)
         return Response(data, media_type='audio/mpeg' if request.response_format=='mp3' else 'audio/wav')
     return app
 

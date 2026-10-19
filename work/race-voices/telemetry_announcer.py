@@ -1,5 +1,6 @@
 """Read-only iRacing SDK lap/track announcements; standard spotter takes priority."""
 import json
+import math
 import queue
 import re
 import threading
@@ -10,7 +11,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
 from runtime_settings import documents, data_path, service_url
-from opening_sequence import OpeningLine,opening_sequence,mark_opening,component_interrupts_opening
+from opening_sequence import OpeningLine,opening_sequence,mark_opening,component_interrupts_opening,component_interrupts_playback
 SC_TEMP = documents()/'Simulator Controller/Temp'
 
 @lru_cache(maxsize=1)
@@ -135,7 +136,7 @@ class LapIncidents:
 
 def play_with_priority(play, stop, speaking, duration, created, limit, opening=False,
                        is_status=False, on_interrupt=lambda:None, now=None,
-                       sleep=None,cancelled=lambda:False):
+                       sleep=None,cancelled=lambda:False,interrupt_delay=None):
     now=now or time.monotonic
     sleep=sleep or time.sleep
     attempts=40 if opening else 2
@@ -155,7 +156,8 @@ def play_with_priority(play, stop, speaking, duration, created, limit, opening=F
             if cancelled():stop();return False
             if speaking():
                 if speaking_since is None:speaking_since=now()
-                if not opening or now()-speaking_since>=.35:
+                delay=interrupt_delay() if interrupt_delay is not None else (.35 if opening else 0)
+                if now()-speaking_since>=delay:
                     stop();interrupted=True;on_interrupt();break
             else:speaking_since=None
             sleep(.1)
@@ -169,31 +171,48 @@ class LapTracker:
         self.last_time = 0
         self.pending = None
         self.best = None
+        self.early_score = None
+        self.current_time = None
+        self.crossing = None
 
-    def update(self, completed, seconds, now, valid=True, current_lap=None):
+    def update(self, completed, seconds, now, valid=True, current_lap=None, score_lap=None, score_seconds=None):
+        previous_timer=self.current_time;self.current_time=current_lap
+        if (previous_timer is not None and current_lap is not None
+                and previous_timer>1 and current_lap+1<previous_timer):
+            self.crossing=(completed if self.completed is not None and completed>self.completed else completed+1,now)
         if self.completed is None or completed < self.completed:
             self.completed, self.last_time, self.pending = completed, seconds, None
-            self.best = seconds if seconds > 0 else None
+            self.best = seconds if completed>0 and valid and seconds>0 else None
+            self.early_score = None
             return None
         if completed > self.completed:
             self.pending = (completed, now, valid)
             self.completed = completed
         if not self.pending:
+            if (seconds>0 and seconds!=self.last_time and self.crossing is not None
+                    and self.crossing[0]==completed+1 and 0<=now-self.crossing[1]<=5):
+                self.early_score=(completed+1,seconds,now)
             self.last_time=seconds
             return None
         if now-self.pending[1]>5:
             self.pending=None
             self.last_time=seconds
             return None
-        if seconds <= 0:
+        published=(score_lap==completed and isinstance(score_seconds,(int,float))
+                   and math.isfinite(score_seconds) and score_seconds>0)
+        if published:seconds=score_seconds
+        if not math.isfinite(seconds) or seconds <= 0:
             return None
         lap, started, valid = self.pending
         # SDK lap number and last-time variables can update on different ticks.
         # A timer reset proves a crossing, not publication of the new score.
         # Identical values have no freshness evidence; expire instead of guessing.
-        if seconds == self.last_time:
+        early=self.early_score
+        early_fresh=early is not None and early[0]==lap and early[1]==seconds and 0<=now-early[2]<=5
+        if seconds == self.last_time and not early_fresh and not published:
             return None
         self.pending = None
+        self.early_score = None
         self.last_time = seconds
         message = lap_phrase(seconds)
         if not valid:
@@ -335,6 +354,7 @@ class Announcer:
             preempted=lambda:(priority>-2 and safety_event is not None and safety_event.is_set()) or (not is_status and priority>=0 and manual_event is not None and manual_event.is_set()) or (priority>0 and urgent_event is not None and urgent_event.is_set())
             speaking=lambda:(SC_TEMP/'Speaking.status').exists() and (not is_status or active_spotter_safety())
             audio_token=[None]
+            playback_token=[None]
             limit=120 if is_status else (180 if opening or getattr(text,'review',False) else 25)
             try:
                 if cancelled():
@@ -356,7 +376,7 @@ class Announcer:
                     continue
                 payload={
                     'voice':'furina' if text.startswith('本圈') else getattr(text,'voice','clorinde'), 'input':text, 'speed':1.0,
-                    'response_format':'wav','opening':opening,'flag':getattr(text,'flag',False),'review':getattr(text,'review',False),'manual':is_status}
+                    'response_format':'wav','opening':opening,'flag':getattr(text,'flag',False),'review':getattr(text,'review',False),'manual':is_status,'local':True}
                 response=self.synthesis.response((str(text),opening,is_status),lambda payload=payload:requests.post(service_url()+'/v1/audio/speech',json=payload,timeout=90),preempted,manual=is_status,safety=priority==-2)
                 response.raise_for_status()
                 self.audio_state()
@@ -381,12 +401,21 @@ class Announcer:
                     log('expired_after_synthesis', text=text)
                     continue
                 def start_audio():
-                    audio_token[0]=self.audio_owner.play(lambda:winsound.PlaySound(str(audio),winsound.SND_FILENAME|winsound.SND_ASYNC),allowed=lambda:not preempted())
+                    def begin():
+                        from local_playback import claim
+                        playback_token[0]=claim(ROOT,duration)
+                        winsound.PlaySound(str(audio),winsound.SND_FILENAME|winsound.SND_ASYNC)
+                    audio_token[0]=self.audio_owner.play(begin,allowed=lambda:not preempted())
+                def stop_audio():
+                    from local_playback import release
+                    release(ROOT,playback_token[0])
+                    self.audio_owner.stop(audio_token[0],lambda:winsound.PlaySound(None,winsound.SND_PURGE))
                 played=play_with_priority(
                     start_audio,
-                    lambda:self.audio_owner.stop(audio_token[0],lambda:winsound.PlaySound(None,winsound.SND_PURGE)),
-                    lambda:speaking() and (not opening or component_interrupts_opening()),duration,created,limit,
+                    stop_audio,
+                    lambda:speaking() and (component_interrupts_opening() if opening else component_interrupts_playback(SC_TEMP/'Speaking.status')),duration,created,limit,
                     opening=opening,is_status=is_status,
+                    interrupt_delay=lambda:0 if active_spotter_safety() else .35,
                     on_interrupt=lambda:log('yield_to_spotter',text=text),cancelled=lambda:cancelled() or preempted())
                 log('played' if played else 'playback_not_completed',text=text,duration=round(duration,2))
                 if not played and preempted() and not is_status and not cancelled():
@@ -400,6 +429,8 @@ class Announcer:
                         except queue.Full:log('resume_queue_full',text=text)
                 else:self.audio_state(e)
             finally:
+                from local_playback import release
+                release(ROOT,playback_token[0])
                 if priority==-2:self.safety_active.clear()
                 if isinstance(text,OpeningLine) and getattr(text,'last',False) and not cancelled() and not preempted():
                     mark_opening(False)
@@ -483,6 +514,8 @@ def run():
                 write_snapshot(driver_info,ir['CarIdxClassPosition'])
                 driver_numbers_at=time.monotonic()
                 flags_monitor=FlagMonitor()
+                from flag_monitor import PlayerFinish
+                finish_monitor=PlayerFinish();last_lap_sample=None
                 driver = next((d for d in driver_info.get('Drivers',[]) if d.get('CarIdx')==driver_info.get('DriverCarIdx')), {})
                 car_path = driver.get('CarPath','')
                 try:
@@ -497,7 +530,11 @@ def run():
             if time.monotonic()-driver_numbers_at>=2:
                 write_snapshot(ir['DriverInfo'] or {},ir['CarIdxClassPosition'])
                 driver_numbers_at=time.monotonic()
-            for flag in flags_monitor.update(int(ir['SessionFlags'] or 0),time.monotonic()):
+            finish_sample=review_snapshot(ir,name)
+            finish_sample['flags']=int(ir['SessionFlags'] or 0)
+            player_finished=finish_monitor.update(finish_sample)
+            if finish_sample['mode']=='race':finish_sample['player_checkered']=player_finished
+            for flag in flags_monitor.update(int(ir['SessionFlags'] or 0),time.monotonic(),player_finished=player_finished):
                 log('flag_detected',text=flag,flags=int(ir['SessionFlags'] or 0))
                 announcer.submit(flag)
             if time.monotonic()-flags_status_at>=2:
@@ -525,7 +562,11 @@ def run():
             sdk_lap=int(ir['Lap'] or 0)
             current_time=float(ir['LapCurrentLapTime'] or 0)
             lap_incidents.update(sdk_lap,incidents,completed,current_time,seconds)
-            try:review_action('observe',dict(review_snapshot(ir,name),lap_valid=lap_incidents.valid(completed)),time.time())
+            lap_sample=(completed,seconds,sdk_lap,incidents,finish_sample['state'],finish_sample['player_checkered'],finish_sample['score_lap'],finish_sample['score_seconds'])
+            if lap_sample!=last_lap_sample:
+                log('lap_sample',completed=completed,seconds=seconds,sdk_lap=sdk_lap,incidents=incidents,current_time=current_time,state=finish_sample['state'],player_finished=player_finished,player_flags_available=finish_sample['player_flags_available'],score_lap=finish_sample['score_lap'],score_seconds=finish_sample['score_seconds'],flags=finish_sample['flags'])
+                last_lap_sample=lap_sample
+            try:review_action('observe',dict(finish_sample,lap_valid=lap_incidents.valid(completed)),time.time())
             except (ValueError,TypeError,KeyError,AttributeError) as error:log('review_snapshot_error',detail=str(error)[:200])
             session_info=ir['SessionInfo'] or {}
             session_number=ir['SessionNum']
@@ -537,7 +578,7 @@ def run():
                 tracker.update(completed,seconds,time.monotonic())
                 message=None
             else:
-                message = tracker.update(completed, seconds, time.monotonic(), valid=lap_incidents.valid(completed), current_lap=current_time)
+                message = tracker.update(completed, seconds, time.monotonic(), valid=lap_incidents.valid(completed), current_lap=current_time,score_lap=finish_sample['score_lap'],score_seconds=finish_sample['score_seconds'])
             if message:
                 log('lap_detected', lap=completed, sdk_lap=sdk_lap, incidents=incidents, invalid_laps=sorted(lap_incidents.invalid), seconds=seconds, text=message)
                 announcer.submit(message)

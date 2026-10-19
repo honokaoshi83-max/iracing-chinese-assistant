@@ -2,7 +2,7 @@
 import argparse,hashlib,json,os,re,shutil,subprocess,tempfile,time,uuid,zipfile
 from pathlib import Path,PurePosixPath
 
-PRIVATE={'status_button_settings.json','playback_settings.json','tire_settings.json','emotion_settings.json','voices.json','voice_library.json','voice_import_request.json','review_state.json','review_status.json','manual_speech_active.json','app_owner.json'}
+PRIVATE={'status_button_settings.json','playback_settings.json','tire_settings.json','emotion_settings.json','voices.json','voice_library.json','voice_import_request.json','review_state.json','review_status.json','manual_speech_active.json','app_owner.json','local_playback.json'}
 BLOCKED=('.runtime/','.updates/','复盘/','work/race-voices/models/','work/race-voices/cache/','work/race-voices/GPT-SoVITS/','work/race-voices/samples/')
 
 def digest(data):return hashlib.sha256(data).hexdigest()

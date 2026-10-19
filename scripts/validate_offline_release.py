@@ -20,7 +20,7 @@ for row in assets:
 assert not (root/'复盘').exists(),'个人复盘目录'
 for name in ('local.json','race-strategy.json'):assert not (root/'config'/name).exists(),name
 for name in ('driver_numbers.json','component_speech_priority.json','opening_active.json',
-             'voice_library.json','voice_import_request.json','playback_settings.json','simulator_controller_owner.json','app_owner.json','review_state.json','review_status.json','manual_speech_active.json'):
+             'voice_library.json','voice_import_request.json','playback_settings.json','simulator_controller_owner.json','app_owner.json','local_playback.json','review_state.json','review_status.json','manual_speech_active.json'):
     assert not (root/'work/race-voices'/name).exists(),name
 print(json.dumps({'version':manifest['version'],'source_hashes':len(manifest['files']),
                   'verified_models':len(assets),'private_state':'absent'}))

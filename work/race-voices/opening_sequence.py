@@ -7,9 +7,10 @@ import subprocess
 import wave
 import time
 import threading
+import uuid
 from pathlib import Path
 from functools import lru_cache
-from runtime_settings import data_path
+from runtime_settings import data_path,documents
 
 ENGINEER='我是克洛琳德，负责赛车状态、油量和维修提醒。'
 SPOTTER='我是芙宁娜，比赛中的圈速播报和周围赛车提醒由我负责，我也会留意天气变化与进站策略。'
@@ -17,22 +18,51 @@ ACTIVE=Path(__file__).resolve().parent/'opening_active.json'
 PRIORITY=ACTIVE.with_name('component_speech_priority.json')
 PRIORITY_LOCK=threading.Lock()
 
-def record_component_priority(text,suppressed):
+def component_marker(path=None):
+    path=Path(path) if path is not None else documents()/'Simulator Controller/Temp/Speaking.status'
+    try:
+        stat=path.stat();return [stat.st_ino,stat.st_mtime_ns,stat.st_size]
+    except OSError:return None
+
+def aggregate_pending(state):
+    waiting=[r for r in state.get('requests',{}).values() if r['until']>time.time() and r.get('marker')==state.get('marker')]
+    state['safety']=state.get('current_safety',False) or any(r['safety'] for r in waiting)
+    state['interrupt']=state.get('current_interrupt',False) or any(r['interrupt'] for r in waiting)
+
+def complete_component_request(token):
+    with PRIORITY_LOCK:
+        try:
+            state=json.loads(PRIORITY.read_text(encoding='utf-8'))
+            state.get('requests',{}).pop(token,None)
+            if state.get('request_id')==token:
+                state['playback_until']=time.time()+3
+            aggregate_pending(state)
+            temp=PRIORITY.with_suffix('.tmp');temp.write_text(json.dumps(state),encoding='utf-8');temp.replace(PRIORITY)
+        except (OSError,ValueError,KeyError):pass
+
+def record_component_priority(text,suppressed,pending=False):
     from emotion_profiles import classify
     from button_priority import spotter_safety
     safety=not suppressed and spotter_safety(text)
     urgent=not suppressed and (classify(text)=='warning' or safety)
     with PRIORITY_LOCK:
+        try:previous=json.loads(PRIORITY.read_text(encoding='utf-8'))
+        except (OSError,ValueError):previous={}
         until=time.time()+(15 if urgent else 3)
         if not urgent:
-            try:
-                previous=json.loads(PRIORITY.read_text(encoding='utf-8'))
-                if previous.get('urgent') and previous.get('until',0)>time.time():
-                    urgent=True;until=previous['until']
-            except (OSError,ValueError):pass
+            if previous.get('urgent') and previous.get('until',0)>time.time():
+                urgent=True;until=previous['until']
+        token=uuid.uuid4().hex;marker=component_marker()
+        requests={key:value for key,value in previous.get('requests',{}).items() if value['until']>time.time()}
+        interrupt=not suppressed and (classify(text)=='warning' or safety)
+        if pending and not suppressed:requests[token]=dict(safety=safety,interrupt=interrupt,until=time.time()+120,marker=marker)
+        state=dict(urgent=urgent,current_safety=safety,current_interrupt=interrupt,suppressed=suppressed,until=until,
+                   playback_until=time.time()+120 if pending and not suppressed else until,marker=marker,requests=requests,request_id=token)
+        aggregate_pending(state)
         temporary=PRIORITY.with_suffix('.tmp')
-        temporary.write_text(json.dumps({'urgent':urgent,'safety':safety,'until':until}),encoding='utf-8')
+        temporary.write_text(json.dumps(state),encoding='utf-8')
         temporary.replace(PRIORITY)
+        return token
 
 def component_interrupts_opening():
     try:
@@ -40,6 +70,17 @@ def component_interrupts_opening():
         if state['until']>time.time():return state['urgent']
     except (OSError,ValueError,KeyError):pass
     # Unknown cached component speech remains eligible for safety priority.
+    return True
+
+def component_interrupts_playback(marker_path=None):
+    try:
+        state=json.loads(PRIORITY.read_text(encoding='utf-8'))
+        if state.get('playback_until',state['until'])>time.time():
+            if state.get('interrupt',True):return True
+            marker=component_marker(marker_path)
+            if marker is not None and marker==state.get('marker'):return False
+    except (OSError,ValueError,KeyError):pass
+    # Unknown cached spotter audio keeps safety priority.
     return True
 
 def mark_opening(active):

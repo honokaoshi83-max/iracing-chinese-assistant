@@ -3,6 +3,31 @@ from telemetry_announcer import LapTracker, TrackCatalog, clean_phrase
 from pathlib import Path
 
 class TelemetryTests(unittest.TestCase):
+    def test_old_outlap_score_is_not_a_best_lap_baseline(self):
+        t=LapTracker();t.update(0,55,0)
+        self.assertEqual(t.update(1,65,65),'本圈一分零五秒零。')
+    def test_identical_score_with_official_completed_lap_is_announced(self):
+        t=LapTracker();t.update(1,65,0)
+        self.assertIsNone(t.update(2,65,65))
+        self.assertIn('本圈一分零五秒',t.update(2,65,65.25,score_lap=2,score_seconds=65))
+
+    def test_outlap_incident_score_first_then_counter_still_announces_first(self):
+        from telemetry_announcer import LapIncidents
+        incidents=LapIncidents();incidents.update(0,0);incidents.update(0,1);incidents.update(1,1)
+        t=LapTracker();t.update(0,0,0,current_lap=64)
+        t.update(0,65,65,current_lap=.1)
+        line=t.update(1,65,65.25,valid=incidents.valid(1),current_lap=.35)
+        self.assertEqual(line,'本圈一分零五秒零。')
+    def test_first_lap_score_before_completed_counter_is_not_lost(self):
+        t=LapTracker();t.update(0,0,0,current_lap=64.9)
+        self.assertIsNone(t.update(0,65.2,65,current_lap=.1))
+        self.assertEqual(t.update(1,65.2,65.25,current_lap=.35),'本圈一分零五秒二。')
+
+    def test_outlap_old_score_is_not_reused_after_a_full_lap(self):
+        t=LapTracker();t.update(0,0,0)
+        self.assertIsNone(t.update(0,55,2))
+        self.assertIsNone(t.update(1,55,65))
+        self.assertIn('本圈一分零五秒',t.update(1,65,65.25))
     def test_corrupted_farewell_does_not_synthesize_ini_entries(self):
         self.assertEqual(clean_phrase('鏈椹鹃┒宸茬粨鏉燂紝Bye.2=badBye.3=badBye.4=bad'),
                          '本次比赛结束，期待下一次合作。')

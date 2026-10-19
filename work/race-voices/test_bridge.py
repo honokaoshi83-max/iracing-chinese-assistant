@@ -10,6 +10,13 @@ except ImportError:
     VoiceService = None
 
 class VoiceTests(unittest.TestCase):
+    def test_native_review_evaluation_is_silent(self):
+        from fastapi.testclient import TestClient
+        from bridge import create_app
+        client=TestClient(create_app(self.service))
+        for text in ('芙宁娜：P 6 同组别，稳定但可提升。','但是，圈速很稳定。'):
+            self.assertEqual(client.post('/v1/audio/speech',json=dict(voice='furina',input=text,response_format='mp3')).status_code,200)
+        self.assertEqual(self.calls,[])
     def test_old_report_prompts_are_silent_without_synthesis(self):
         from fastapi.testclient import TestClient
         from bridge import create_app
@@ -19,17 +26,16 @@ class VoiceTests(unittest.TestCase):
             self.assertEqual(response.status_code,200)
         self.assertEqual(self.calls,[])
 
-    def test_review_notice_is_not_suppressed_and_native_review_is_journaled(self):
+    def test_review_notice_is_not_suppressed_and_native_evaluation_is_ignored(self):
         from fastapi.testclient import TestClient
         from bridge import create_app
         import json
         client=TestClient(create_app(self.service))
-        response=client.post('/v1/audio/speech',json=dict(voice='furina',input='本次复盘已经保存。',response_format='mp3',review=True))
-        self.assertEqual(response.status_code,200);self.assertEqual(self.calls[-1][1],'本次复盘已经保存。')
+        response=client.post('/v1/audio/speech',json=dict(voice='furina',input='复盘文本已保存，请进入软件查看。',response_format='mp3',review=True))
+        self.assertEqual(response.status_code,200);self.assertEqual(self.calls[-1][1],'复盘文本已保存，请进入软件查看。')
         client.post('/v1/audio/speech',json=dict(voice='furina',input='芙宁娜：P 6 同组别，稳定但可提升。',response_format='mp3'))
-        events=[json.loads(s) for s in (Path(self.tmp.name)/'review_native_events.jsonl').read_text(encoding='utf-8').splitlines()]
-        self.assertEqual([e['event'] for e in events],['request','ready'])
-        self.assertEqual(events[0]['id'],events[1]['id'])
+        self.assertFalse((Path(self.tmp.name)/'review_native_events.jsonl').exists())
+        self.assertEqual(len(self.calls),1)
     def test_lap_time_always_uses_furina_in_dual_voice_mode(self):
         self.service.speech('clorinde','本圈一分零九秒七。比最快圈慢0.3秒。',1,'mp3')
         self.assertEqual(self.calls[-1][0],'furina')

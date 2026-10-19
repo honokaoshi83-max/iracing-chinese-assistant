@@ -175,7 +175,7 @@ class ReviewCoordinator:
                 row=next((r for r in reversed(self.records()) if r.get('native_started') and not r.get('saved')),None)
             if not row or request_id in row['seen_requests']:return
             if not row.get('ended_at'):
-                premature=row.get('state')==4 and row.get('expected_end_wall',0)>now and not row.get('end_confirmed')
+                premature=row.get('state') in (4,5) and not row.get('end_confirmed')
                 if row is self.current and not premature:self.end('策略师触发赛后复盘',now)
             row['native_started']=True;row['seen_requests'].append(request_id);row['inflight'][request_id]=now
             if event.get('text') and event['text'] not in row['native']:row['native'].append(event['text'])
@@ -235,8 +235,6 @@ class ReviewCoordinator:
             try:
                 result=save_review(self.project,report);row['saved']=True;self.done.append(row['id']);self.error=None;self.persist(now)
                 if result['new']:
-                    if row['mode']=='time_trial':
-                        for line in time_trial_summary(row['laps'])['summary']:self.emit(ReviewLine(line))
                     self.emit(ReviewLine(SAVED))
             except (OSError,ValueError) as error:
                 row['retry_after']=now+5;self.error='复盘保存失败：'+str(error);self.persist(now)
@@ -276,5 +274,6 @@ def snapshot(ir,track_name):
         pit=bool(get('OnPitRoad',False)),replay=bool(get('IsReplayPlaying',False)),position=pos,class_position=cls,
         grid=positive(grid),cars=len([r for r in people if not r.get('CarIsPaceCar') and not r.get('IsSpectator')]) or None,
         player_checkered=bool((player_flags if player_flags is not None else get('SessionFlags',0) if mode=='time_trial' else 0)&1),
+        player_flags_available=player_flags is not None,
         disqualified=bool(get('SessionFlags',0)&0x20000),official=final,
         position_source='SDK正式结果' if final and positive(result.get('Position')) else 'SDK最后观测值，最终结果未确认')

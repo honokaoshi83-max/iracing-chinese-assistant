@@ -10,6 +10,10 @@ def context(**kw):
                      completed=0,position=6,class_position=2,cars=20,grid=8,official=False),**kw)
 
 class ReviewTests(unittest.TestCase):
+    def test_native_review_during_leader_checkered_cannot_end_player_race(self):
+        self.c.observe(context(state=5,clock=300,player_checkered=False,time_remaining=0),1000)
+        self.c.native(dict(id='early',kind='start',event='request',text='芙宁娜：P 4 ，下次再进一步。'),1001)
+        self.assertIsNone(self.c.current.get('ended_at'))
     def setUp(self):
         self.tmp=tempfile.TemporaryDirectory();self.addCleanup(self.tmp.cleanup)
         self.root=Path(self.tmp.name);self.sent=[];self.c=ReviewCoordinator(self.root,self.sent.append)
@@ -133,7 +137,7 @@ class ReviewTests(unittest.TestCase):
         for number,seconds in enumerate((102,101,100,99),1):self.c.add_lap(number,seconds,True)
         self.c.end('会话结束',1410);self.c.tick(1420)
         expected=time_trial_summary(self.c.current['laps'])['summary']
-        self.assertEqual([str(line) for line in self.sent],expected+[SAVED])
+        self.assertEqual([str(line) for line in self.sent],['复盘文本已保存，请进入软件查看。'])
         self.assertIn('下一场',''.join(recent_reviews(self.root)[0]['summary']))
 
     def test_same_race_resume_after_exit_generates_updated_final_review(self):

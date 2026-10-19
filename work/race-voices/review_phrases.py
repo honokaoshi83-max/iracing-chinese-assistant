@@ -4,8 +4,8 @@ from functools import lru_cache
 from pathlib import Path
 from runtime_settings import data_path
 
-SAVED='本次复盘已经保存。'
-SAVE_KEYS={'ConfirmSaveSettingsAndRaceReport','ConfirmSaveRaceReport','RaceReportSaved'}
+SAVED='复盘文本已保存，请进入软件查看。'
+SAVE_KEYS={'ConfirmSaveSettingsAndRaceReport','ConfirmSaveRaceReport','RaceReportSaved','ConfirmSaveSettings'}
 START_KEYS={'GreatRace','MediocreRace','CatastrophicRace'}
 END_KEYS={'GoodConsistency','MediocreConsistency','BadConsistency'}
 PART_KEYS={'Compare2Leader','InvalidCritics','PositiveSummary','GoodPace','MediocrePace','BadPace'}
@@ -17,7 +17,7 @@ def patterns():
     result=[]
     for row in entries:
         key=row.get('key','').split('.')[0]
-        if row.get('role')!='Race Strategist' or key not in SAVE_KEYS|START_KEYS|END_KEYS|PART_KEYS:continue
+        if key not in SAVE_KEYS and (row.get('role')!='Race Strategist' or key not in START_KEYS|END_KEYS|PART_KEYS):continue
         for template in (row['before'].strip(),row['after'].strip()):
             names=set();parts=[];cursor=0
             for match in re.finditer(r'%([A-Za-z][A-Za-z0-9_]*)%',template):
@@ -27,7 +27,7 @@ def patterns():
     return result
 
 def classify(text):
-    if text.strip()==SAVED:return dict(kind='save',key='LocalReviewSaved',values={})
+    if text.strip() in (SAVED,'本次复盘已经保存。'):return dict(kind='save',key='LocalReviewSaved',values={})
     for pattern,key in patterns():
         match=pattern.fullmatch(text.strip())
         if match:return dict(kind='save' if key in SAVE_KEYS else 'start' if key in START_KEYS else 'end' if key in END_KEYS else 'part',key=key,values=match.groupdict())

@@ -19,9 +19,27 @@ class FlagLine(str):
     voice='furina'
     flag=True
 
+class PlayerFinish:
+    """A leader's checkered starts the finishing phase, not everyone's finish."""
+    def __init__(self):self.finished=False;self.checkered=False;self.completed=None
+
+    def update(self,sample):
+        if sample.get('mode')!='race':return True
+        state=sample.get('state');completed=sample.get('completed',0)
+        finishing=state in (5,6) or bool(sample.get('flags',0)&1)
+        crossed=self.completed is not None and completed>self.completed
+        if state==6:self.finished=True
+        elif sample.get('player_flags_available'):
+            self.finished |= finishing and bool(sample.get('player_checkered'))
+        elif finishing and crossed and (self.checkered or sample.get('position')==1):
+            self.finished=True
+        self.checkered=finishing;self.completed=completed
+        return self.finished
+
 class FlagMonitor:
     def __init__(self):self.previous=set();self.seen=False;self.last={}
-    def update(self,flags,now):
+    def update(self,flags,now,player_finished=True):
+        if not player_finished:flags &= ~0x1
         active={name for name,mask,_ in RULES if flags & mask}
         if 'dq' in active:active.discard('black')
         if 'caution' in active:active.discard('yellow')

@@ -7,7 +7,7 @@
 [Setup]
 AppId={{C6EF8023-4883-4F24-A134-043E8D091F09}
 AppName=iracing中文播报助手
-AppVersion=0.2.8
+AppVersion=0.2.9
 AppPublisher=honokaoshi83-max
 DefaultDirName={localappdata}\Programs\iRacingChineseAssistant
 DefaultGroupName=iracing中文播报助手
@@ -16,7 +16,7 @@ ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 MinVersion=10.0
 OutputDir={#OutputDir}
-OutputBaseFilename=iracing-chinese-assistant-0.2.8-setup
+OutputBaseFilename=iracing-chinese-assistant-0.2.9-setup
 Compression=zip/1
 DiskSpanning=yes
 DiskSliceSize=max
@@ -35,7 +35,7 @@ Name: "chinesesimp"; MessagesFile: "compiler:Languages\ChineseSimplified.isl"
 Name: "desktopicon"; Description: "创建桌面快捷方式"; Flags: checkedonce
 
 [Files]
-Source: "{#PayloadDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs; Excludes: "*.log,*.jsonl,*.pyc,*.pid,*.lock,*.tmp,__pycache__\*,config\local.json,work\race-voices\voice_library.json,work\race-voices\voice_import_request.json,work\race-voices\playback_settings.json,work\race-voices\models\custom\*,work\race-voices\cache\*,work\race-voices\samples\*,work\race-voices\status_button_status.json,work\race-voices\active_inference.yaml,work\race-voices\watchdog.stop,work\race-voices\simulator_controller_owner.json,work\race-voices\app_owner.json,work\race-voices\status_button_settings.json,work\race-voices\driver_numbers.json,work\race-voices\component_speech_priority.json,work\race-voices\opening_active.json,work\race-voices\emotion_settings.json,work\race-voices\tire_settings.json,work\race-voices\voices.json"
+Source: "{#PayloadDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs; Excludes: "*.log,*.jsonl,*.pyc,*.pid,*.lock,*.tmp,__pycache__\*,config\local.json,work\race-voices\voice_library.json,work\race-voices\voice_import_request.json,work\race-voices\playback_settings.json,work\race-voices\models\custom\*,work\race-voices\cache\*,work\race-voices\samples\*,work\race-voices\status_button_status.json,work\race-voices\active_inference.yaml,work\race-voices\watchdog.stop,work\race-voices\simulator_controller_owner.json,work\race-voices\app_owner.json,work\race-voices\local_playback.json,work\race-voices\status_button_settings.json,work\race-voices\driver_numbers.json,work\race-voices\component_speech_priority.json,work\race-voices\opening_active.json,work\race-voices\emotion_settings.json,work\race-voices\tire_settings.json,work\race-voices\voices.json"
 
 Source: "{#PayloadDir}\work\race-voices\status_button_settings.json"; DestDir: "{app}\work\race-voices"; Flags: onlyifdoesntexist
 Source: "{#PayloadDir}\work\race-voices\emotion_settings.json"; DestDir: "{app}\work\race-voices"; Flags: onlyifdoesntexist
