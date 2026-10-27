@@ -1,9 +1,6 @@
 """Offline, evidence-based session comments. No network or inference runtime."""
-import hashlib,math,statistics
-from review_consistency import measure,description,pace_trend
-
-def timed(value):
-    return type(value) in (int,float) and math.isfinite(value) and 10<=value<=3600
+import hashlib,statistics
+from review_consistency import measure,description,pace_trend,timed
 
 def assess_session(row):
     from telemetry_announcer import chinese_number,lap_phrase

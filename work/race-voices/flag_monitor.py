@@ -1,6 +1,7 @@
 """Announce flag transitions from SDK flags, never infer a penalty offence."""
 import json,time,re
 from pathlib import Path
+from atomic_io import write_json
 
 STATUS=Path(__file__).resolve().parent/'flag_monitor_status.json'
 RULES=[('dq',0x20000|0x200000,'黑旗，已被取消资格，请安全离开赛道。'),
@@ -60,4 +61,4 @@ def managed():
     except (OSError,ValueError):return False
 def mark_active(active):
     if not active:STATUS.unlink(missing_ok=True);return
-    temp=STATUS.with_suffix('.tmp');temp.write_text(json.dumps({'until':time.time()+6}),encoding='utf-8');temp.replace(STATUS)
+    write_json(STATUS,{'until':time.time()+6})

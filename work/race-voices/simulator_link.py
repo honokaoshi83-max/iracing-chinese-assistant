@@ -3,6 +3,7 @@ import json,subprocess,sys,time
 from pathlib import Path
 import psutil
 from runtime_settings import project_root
+from atomic_io import write_json
 
 OWNER=Path(__file__).parent/'simulator_controller_owner.json'
 
@@ -84,7 +85,7 @@ class SimulatorLink:
             record['voice_pid']=broker.pid
             if broker_record:record['voice_server']=broker_record
             self.owner.parent.mkdir(parents=True,exist_ok=True)
-            temporary=self.owner.with_suffix('.tmp');temporary.write_text(json.dumps(record),encoding='utf-8');temporary.replace(self.owner)
+            write_json(self.owner,record)
         except Exception:
             if process:terminate(process)
             if broker_record:terminate(broker)

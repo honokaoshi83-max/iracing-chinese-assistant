@@ -4,6 +4,7 @@ from datetime import datetime
 from pathlib import Path
 import requests, psutil
 from runtime_settings import project_root, simulator_root, documents
+from atomic_io import write_json
 from setup_simulator import main as connect_speech
 
 MANIFEST = 'https://raw.githubusercontent.com/SeriousOldMan/Simulator-Controller/main/VERSION'
@@ -153,7 +154,7 @@ def save_root(root):
     path = project_root() / 'config/local.json'
     config = json.loads(path.read_text(encoding='utf-8-sig')) if path.exists() else {}
     config['simulator_controller'] = str(root)
-    temp = path.with_suffix('.proxy.tmp'); temp.write_text(json.dumps(config, ensure_ascii=False, indent=2), encoding='utf-8'); temp.replace(path)
+    write_json(path, config, '.proxy.tmp', ensure_ascii=False, indent=2)
 
 def main():
     parser = argparse.ArgumentParser(); parser.add_argument('--check', action='store_true'); args = parser.parse_args()

@@ -1,6 +1,7 @@
 """Learn a new controller button without consuming or injecting game input."""
 import ctypes,json,time
 from status_button import ROOT,WinMMButton,JoyInfo
+from atomic_io import write_json
 
 class Capture:
     def __init__(self):self.previous={}
@@ -32,7 +33,7 @@ def learn(timeout=30):
                 device,button=selected;path=ROOT/'status_button_settings.json'
                 cfg=json.loads(path.read_text(encoding='utf-8'))
                 cfg.update(device=device,button=button)
-                tmp=path.with_suffix('.binding.tmp');tmp.write_text(json.dumps(cfg,ensure_ascii=False),encoding='utf-8');tmp.replace(path)
+                write_json(path,cfg,'.binding.tmp',ensure_ascii=False)
                 print(f'绑定成功：控制器 {device}，按钮 {button}。已自动保存。',flush=True)
                 # Suppress the learning press until release, then allow hot reload.
                 until=time.monotonic()+3

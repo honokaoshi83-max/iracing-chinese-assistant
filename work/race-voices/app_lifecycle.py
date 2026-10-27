@@ -6,6 +6,8 @@ import uuid
 
 import psutil
 
+from atomic_io import release_if_owned, write_json
+
 
 def claim(root):
     root = Path(root)
@@ -13,9 +15,7 @@ def claim(root):
     process = psutil.Process(os.getpid())
     record = dict(pid=process.pid, created=process.create_time(),
                   exe=process.exe(), token=uuid.uuid4().hex)
-    temporary = root/'app_owner.tmp'
-    temporary.write_text(json.dumps(record), encoding='utf-8')
-    temporary.replace(root/'app_owner.json')
+    write_json(root/'app_owner.json', record)
     return record
 
 
@@ -33,9 +33,4 @@ def owner_alive(root, token=None):
 
 
 def release(root, record):
-    path = Path(root)/'app_owner.json'
-    try:
-        if json.loads(path.read_text(encoding='utf-8')) == record:
-            path.unlink(missing_ok=True)
-    except (OSError, ValueError):
-        pass
+    release_if_owned(Path(root)/'app_owner.json', record)

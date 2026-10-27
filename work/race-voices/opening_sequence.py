@@ -11,6 +11,7 @@ import uuid
 from pathlib import Path
 from functools import lru_cache
 from runtime_settings import data_path,documents
+from atomic_io import write_json
 
 ENGINEER='我是克洛琳德，负责赛车状态、油量和维修提醒。'
 SPOTTER='我是芙宁娜，比赛中的圈速播报和周围赛车提醒由我负责，我也会留意天气变化与进站策略。'
@@ -37,7 +38,7 @@ def complete_component_request(token):
             if state.get('request_id')==token:
                 state['playback_until']=time.time()+3
             aggregate_pending(state)
-            temp=PRIORITY.with_suffix('.tmp');temp.write_text(json.dumps(state),encoding='utf-8');temp.replace(PRIORITY)
+            write_json(PRIORITY,state)
         except (OSError,ValueError,KeyError):pass
 
 def record_component_priority(text,suppressed,pending=False):
@@ -59,9 +60,7 @@ def record_component_priority(text,suppressed,pending=False):
         state=dict(urgent=urgent,current_safety=safety,current_interrupt=interrupt,suppressed=suppressed,until=until,
                    playback_until=time.time()+120 if pending and not suppressed else until,marker=marker,requests=requests,request_id=token)
         aggregate_pending(state)
-        temporary=PRIORITY.with_suffix('.tmp')
-        temporary.write_text(json.dumps(state),encoding='utf-8')
-        temporary.replace(PRIORITY)
+        write_json(PRIORITY,state)
         return token
 
 def component_interrupts_opening():
@@ -85,9 +84,7 @@ def component_interrupts_playback(marker_path=None):
 
 def mark_opening(active):
     if active:
-        temporary=ACTIVE.with_suffix('.tmp')
-        temporary.write_text(json.dumps({'until':time.time()+180}),encoding='utf-8')
-        temporary.replace(ACTIVE)
+        write_json(ACTIVE,{'until':time.time()+180})
     else:ACTIVE.unlink(missing_ok=True)
 
 def opening_active():

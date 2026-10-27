@@ -1,6 +1,7 @@
 """Map current-session driver references to actual entry numbers, never ranks."""
 import json,re,time
 from pathlib import Path
+from atomic_io import write_json
 
 FILE=Path(__file__).resolve().parent/'driver_numbers.json'
 
@@ -34,9 +35,7 @@ def snapshot(info,positions=None):
     return result
 
 def write_snapshot(info,positions=None):
-    temporary=FILE.with_suffix('.tmp')
-    temporary.write_text(json.dumps(snapshot(info,positions),ensure_ascii=False),encoding='utf-8')
-    temporary.replace(FILE)
+    write_json(FILE,snapshot(info,positions),ensure_ascii=False)
 
 def clear_snapshot():FILE.unlink(missing_ok=True)
 

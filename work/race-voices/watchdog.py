@@ -9,6 +9,7 @@ import time
 import psutil
 import requests
 from app_lifecycle import owner_alive
+from atomic_io import append_jsonl, write_json
 
 ROOT = Path(__file__).resolve().parent
 from runtime_settings import service_url, settings, instance_id
@@ -53,8 +54,7 @@ def processes(script):
     return found
 
 def log(event, **data):
-    with (ROOT/'watchdog_events.jsonl').open('a',encoding='utf-8') as f:
-        f.write(json.dumps(dict(time=time.strftime('%Y-%m-%d %H:%M:%S'),event=event,**data))+'\n')
+    append_jsonl(ROOT/'watchdog_events.jsonl',dict(time=time.strftime('%Y-%m-%d %H:%M:%S'),event=event,**data))
 
 def launch(script, prefix, extra=()):
     if STOP.exists() or not owner_alive(ROOT, OWNER_TOKEN):
@@ -144,9 +144,7 @@ def main(owner_token):
                 if state != previous:
                     log('state_changed',services=state)
                     previous=state
-                temp=ROOT/'watchdog_status.tmp'
-                temp.write_text(json.dumps(dict(time=time.strftime('%Y-%m-%d %H:%M:%S'),services=state,pid=os.getpid())),encoding='utf-8')
-                temp.replace(ROOT/'watchdog_status.json')
+                write_json(ROOT/'watchdog_status.json',dict(time=time.strftime('%Y-%m-%d %H:%M:%S'),services=state,pid=os.getpid()))
             except Exception as e:
                 log('check_error',type=type(e).__name__)
             time.sleep(2)

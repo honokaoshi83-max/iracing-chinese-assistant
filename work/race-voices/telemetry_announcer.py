@@ -11,6 +11,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
 from runtime_settings import documents, data_path, service_url
+from atomic_io import append_jsonl, write_json
 from opening_sequence import OpeningLine,opening_sequence,mark_opening,component_interrupts_opening,component_interrupts_playback
 SC_TEMP = documents()/'Simulator Controller/Temp'
 
@@ -228,9 +229,7 @@ class LapTracker:
         return message
 
 def log(event, **data):
-    try:
-        with (ROOT/'telemetry_events.jsonl').open('a', encoding='utf-8') as f:
-            f.write(json.dumps({'time':time.strftime('%Y-%m-%d %H:%M:%S'), 'event':event, **data}, ensure_ascii=False)+'\n')
+    try:append_jsonl(ROOT/'telemetry_events.jsonl',{'time':time.strftime('%Y-%m-%d %H:%M:%S'),'event':event,**data})
     except OSError:pass
 
 class Announcer:
@@ -556,9 +555,7 @@ def run():
             if now-tire_status_at>=2:
                 tire_status_at = now
                 tire_state = {'state':'connected','car_path':car_path,**tires.status()}
-                temporary = ROOT/'tire_monitor_status.tmp'
-                temporary.write_text(json.dumps(tire_state,ensure_ascii=False),encoding='utf-8')
-                temporary.replace(ROOT/'tire_monitor_status.json')
+                write_json(ROOT/'tire_monitor_status.json',tire_state,ensure_ascii=False)
             sdk_lap=int(ir['Lap'] or 0)
             current_time=float(ir['LapCurrentLapTime'] or 0)
             lap_incidents.update(sdk_lap,incidents,completed,current_time,seconds)

@@ -7,6 +7,7 @@ import queue
 import threading
 import time
 from pathlib import Path
+from atomic_io import append_jsonl,write_json
 
 ROOT=Path(__file__).resolve().parent
 
@@ -74,8 +75,7 @@ class StatusButton:
             if callback:callback(event,**data)
             else:
                 root=getattr(self,'root',ROOT)
-                with (root/'button_events.jsonl').open('a',encoding='utf-8') as stream:
-                    stream.write(json.dumps(dict(time=time.time(),event=event,**data),ensure_ascii=False)+'\n')
+                append_jsonl(root/'button_events.jsonl',dict(time=time.time(),event=event,**data))
         except Exception:pass # Diagnostics must never disable the button.
 
     def fault(self,error):
@@ -118,8 +118,7 @@ class StatusButton:
             state={**detail,'mode':'single_press' if self.reader else 'unbound','cooldown_seconds':self.latch.cooldown,
                 'time':time.time(),'button_down':down,'last_press':self.last_press,'last_consumed':self.last_consumed,
                 'pending':self.events.qsize(),'last_error':self.last_error,'pid':os.getpid()}
-            temp=self.root/'status_button_status.tmp'
-            try:temp.write_text(json.dumps(state,ensure_ascii=False),encoding='utf-8');temp.replace(self.root/'status_button_status.json')
+            try:write_json(self.root/'status_button_status.json',state,ensure_ascii=False)
             except OSError:pass
             self.last_status=now
 

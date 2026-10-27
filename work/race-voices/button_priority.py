@@ -2,6 +2,7 @@
 import json,os,queue,threading,time
 from contextlib import contextmanager
 from pathlib import Path
+from atomic_io import release_if_owned,write_json
 
 def spotter_safety(text):
     return (text.strip() in ('保持线路。','保持线路') or any(word in text for word in ('蓝旗','快车','三车并排','三辆车并排')) or
@@ -58,8 +59,7 @@ class AudioOwner:
 
 def reserve_manual(root,owner,now=None):
     now=time.time() if now is None else now
-    path=Path(root)/'manual_speech_active.json';tmp=path.with_suffix('.tmp')
-    tmp.write_text(json.dumps(dict(owner=owner,pid=os.getpid(),expires=now+150)),encoding='utf-8');tmp.replace(path)
+    write_json(Path(root)/'manual_speech_active.json',dict(owner=owner,pid=os.getpid(),expires=now+150))
 
 def manual_active(root,now=None):
     try:
@@ -71,10 +71,7 @@ def manual_active(root,now=None):
     except (OSError,ValueError,TypeError):return False
 
 def release_manual(root,owner):
-    path=Path(root)/'manual_speech_active.json'
-    try:
-        if json.loads(path.read_text(encoding='utf-8')).get('owner')==owner:path.unlink(missing_ok=True)
-    except (OSError,ValueError,TypeError):pass
+    release_if_owned(Path(root)/'manual_speech_active.json',owner,'owner')
 
 class ManualPreemption(Exception):pass
 

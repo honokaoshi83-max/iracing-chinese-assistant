@@ -5,7 +5,6 @@ from urllib.parse import urlparse
 import requests
 
 REPO='honokaoshi83-max/iracing-chinese-assistant'
-API='https://api.github.com/repos/'+REPO+'/releases/latest'
 RELEASES_API='https://api.github.com/repos/'+REPO+'/releases'
 PAGE='https://github.com/'+REPO+'/releases/latest'
 MAX_DOWNLOAD=256*1024*1024

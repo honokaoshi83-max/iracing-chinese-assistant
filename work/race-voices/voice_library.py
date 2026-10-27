@@ -3,6 +3,7 @@ import hashlib,json,re,shutil,uuid
 from pathlib import Path,PurePosixPath
 from urllib.parse import urlparse,unquote,quote
 import requests
+from atomic_io import write_json
 
 DEFAULTS={'clorinde':'克洛琳德','furina':'芙宁娜'}
 ROLE_DEFAULTS={'engineer':'clorinde','observer':'furina'}
@@ -13,8 +14,7 @@ class HParams:
     pass
 HParams.__module__='utils'
 
-def atomic(path,value):
-    temp=path.with_suffix('.library.tmp');temp.write_text(json.dumps(value,ensure_ascii=False,indent=2),encoding='utf-8');temp.replace(path)
+def atomic(path,value):write_json(path,value,'.library.tmp',ensure_ascii=False,indent=2)
 
 def safe_relative(root,name):
     name=str(name).replace('\\','/');p=PurePosixPath(name)

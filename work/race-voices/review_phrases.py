@@ -3,6 +3,7 @@ import json,re,threading,time,uuid
 from functools import lru_cache
 from pathlib import Path
 from runtime_settings import data_path
+from atomic_io import append_jsonl
 
 SAVED='复盘文本已保存，请进入软件查看。'
 SAVE_KEYS={'ConfirmSaveSettingsAndRaceReport','ConfirmSaveRaceReport','RaceReportSaved','ConfirmSaveSettings'}
@@ -38,5 +39,5 @@ def record_event(root,phrase,event,request_id=None):
     request_id=request_id or uuid.uuid4().hex
     row=dict(phrase,event=event,id=request_id,time=time.time())
     path=Path(root)/'review_native_events.jsonl'
-    with _lock,path.open('a',encoding='utf-8') as stream:stream.write(json.dumps(row,ensure_ascii=False)+'\n')
+    with _lock:append_jsonl(path,row)
     return request_id
