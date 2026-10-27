@@ -7,7 +7,7 @@
 [Setup]
 AppId={{C6EF8023-4883-4F24-A134-043E8D091F09}
 AppName=iracing中文播报助手
-AppVersion=0.2.9
+AppVersion=0.3.0
 AppPublisher=honokaoshi83-max
 DefaultDirName={localappdata}\Programs\iRacingChineseAssistant
 DefaultGroupName=iracing中文播报助手
@@ -16,7 +16,7 @@ ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 MinVersion=10.0
 OutputDir={#OutputDir}
-OutputBaseFilename=iracing-chinese-assistant-0.2.9-setup
+OutputBaseFilename=iracing-chinese-assistant-0.3.0-setup
 Compression=zip/1
 DiskSpanning=yes
 DiskSliceSize=max
