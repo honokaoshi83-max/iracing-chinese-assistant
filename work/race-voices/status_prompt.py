@@ -3,6 +3,7 @@ import array,io,time,wave,threading
 from pathlib import Path
 from output_volume import load_volume
 from runtime_settings import project_root
+from atomic_io import write_bytes
 
 ACK_TEXT='正在整理具体数据，即将开始播报。'
 
@@ -13,8 +14,7 @@ def save_prompt(data,path=None):
     from bridge import normalize_audio
     from wav_playback import finalize_wav
     target=Path(path or prompt_path());target.parent.mkdir(parents=True,exist_ok=True)
-    temporary=target.with_suffix('.tmp')
-    temporary.write_bytes(finalize_wav(normalize_audio(data,'wav')));temporary.replace(target)
+    write_bytes(target,finalize_wav(normalize_audio(data,'wav')))
 
 class LocalStatusPrompt:
     def __init__(self,path,speaking,root,player=None):

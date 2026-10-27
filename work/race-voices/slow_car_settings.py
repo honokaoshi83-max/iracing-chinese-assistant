@@ -2,6 +2,7 @@
 import hashlib,math
 from pathlib import Path
 from simulator_identity import identity_value
+from atomic_io import write_bytes
 
 MAX_DISTANCE=150
 SECTION='Assistant.Spotter'
@@ -38,5 +39,5 @@ def ensure_slow_car_limit(home):
         if target.exists():
             backup=target.with_name(target.name+'.before-slow-car-'+hashlib.sha256(raw).hexdigest()[:12]+'.bak')
             if not backup.exists():backup.write_bytes(raw)
-        temp=target.with_suffix('.assistant-tmp');temp.write_bytes(result.encode(encoding));temp.replace(target)
+        write_bytes(target,result.encode(encoding),'.assistant-tmp')
     return True

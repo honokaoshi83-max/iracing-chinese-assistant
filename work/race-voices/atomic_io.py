@@ -19,6 +19,18 @@ def write_json(path, value, suffix='.tmp', **dumps):
     temporary.replace(path)
 
 
+def write_bytes(path, data, suffix='.tmp'):
+    """Atomically replace ``path`` with ``data`` exactly as given.
+
+    Used for audio and for already-encoded configuration text, where the
+    caller owns the encoding and line endings.
+    """
+    path = Path(path)
+    temporary = path.with_suffix(suffix)
+    temporary.write_bytes(data)
+    temporary.replace(path)
+
+
 def append_jsonl(path, row):
     """Append one UTF-8 JSON line to a diagnostic journal."""
     with Path(path).open('a', encoding='utf-8') as stream:

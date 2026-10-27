@@ -3,6 +3,7 @@ import json,re,shutil,sys
 from datetime import datetime
 from runtime_settings import documents,settings,data_path
 from remove_dialogue import transform
+from atomic_io import write_bytes
 
 ROLES=('Race Engineer','Race Spotter','Race Strategist')
 
@@ -38,7 +39,7 @@ def main():
     after=portable_configure(raw.decode(enc),settings()['port']).encode(enc)
     if after!=raw:
         shutil.copy2(target,target.with_name(target.name+'.before-chinese-assistant-'+stamp+'.bak'))
-        temp=target.with_suffix('.portable.tmp');temp.write_bytes(after);temp.replace(target)
+        write_bytes(target,after,'.portable.tmp')
     folder=documents()/'Simulator Controller/Grammars';folder.mkdir(parents=True,exist_ok=True)
     for source in data_path('grammars').glob('*.zh'):
         dest=folder/source.name

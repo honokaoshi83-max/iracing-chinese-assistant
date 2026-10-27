@@ -13,6 +13,7 @@ ROOT = Path(__file__).resolve().parent
 os.environ.setdefault('NLTK_DATA',str(ROOT/'nltk_data'))
 VOICES = ('furina', 'clorinde', 'ganyu')
 from runtime_settings import ffmpeg_path, settings, instance_id
+from atomic_io import append_jsonl, write_bytes
 FFMPEG = ffmpeg_path()
 
 def normalize_audio(data, fmt):
@@ -93,7 +94,7 @@ class VoiceService:
                     data=self.style_processor(raw,delivery['speed'])
                 if not data:
                     raise RuntimeError('Empty styled audio')
-                temp=output.with_suffix('.part'); temp.write_bytes(data); temp.replace(output)
+                write_bytes(output,data,'.part')
                 return data
         key = hashlib.sha256(json.dumps([reading_fingerprint, voice, text, speed, fmt], ensure_ascii=False).encode()).hexdigest()
         file = self.cache / (key + '.' + fmt)
@@ -110,9 +111,7 @@ class VoiceService:
                 raise RuntimeError('Empty audio from speech engine')
             if self.postprocess:
                 data = self.postprocess(data, fmt)
-            temp = output.with_suffix('.part')
-            temp.write_bytes(data)
-            temp.replace(output)
+            write_bytes(output, data, '.part')
             return data
 
 class SoVITSEngine:
@@ -177,8 +176,7 @@ class SoVITSEngine:
             data = subprocess.run([str(FFMPEG), '-hide_banner', '-loglevel', 'error', '-f', 'wav', '-i', 'pipe:0', '-f', 'mp3', '-codec:a', 'libmp3lame', '-b:a', '128k', 'pipe:1'], input=data, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True, creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0)).stdout
         import psutil
         metric = {'voice':voice, 'text':text, 'seconds':round(time.perf_counter()-started,3), 'audio_seconds':round(len(audio)/sample_rate,3), 'rss_mb':round(psutil.Process().memory_info().rss/1024**2,1)}
-        with (ROOT/'metrics.jsonl').open('a', encoding='utf-8') as f:
-            f.write(json.dumps(metric, ensure_ascii=False)+'\n')
+        append_jsonl(ROOT/'metrics.jsonl', metric)
         return data
 
 def create_app(service):
@@ -231,12 +229,11 @@ def create_app(service):
         if not request.opening and not request.manual and not request.local:
             from opening_sequence import record_component_priority
             http_request.state.component_priority_token=record_component_priority(request.input,suppressed,pending=not suppressed)
-        with (ROOT/'speech_requests.jsonl').open('a',encoding='utf-8') as record:
-            from voice_routing import route_voice
-            record.write(json.dumps({'time':time.strftime('%Y-%m-%d %H:%M:%S'),
-                'voice':request.voice,'text':request.input,'opening':request.opening,'flag':request.flag,'manual':request.manual,
-                'effective_voice':route_voice(request.input,request.voice),
-                'action':'suppressed_review' if review_phrase is not None else 'suppressed_opening_duplicate' if suppressed else 'speech_request'},ensure_ascii=False)+'\n')
+        from voice_routing import route_voice
+        append_jsonl(ROOT/'speech_requests.jsonl',{'time':time.strftime('%Y-%m-%d %H:%M:%S'),
+            'voice':request.voice,'text':request.input,'opening':request.opening,'flag':request.flag,'manual':request.manual,
+            'effective_voice':route_voice(request.input,request.voice),
+            'action':'suppressed_review' if review_phrase is not None else 'suppressed_opening_duplicate' if suppressed else 'speech_request'})
         if suppressed:
             if request.voice not in service.voices:
                 raise HTTPException(400,'Unknown voice')

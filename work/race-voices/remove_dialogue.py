@@ -3,6 +3,7 @@ import re
 from pathlib import Path
 from datetime import datetime
 import shutil
+from atomic_io import write_bytes
 
 def transform(text):
     section=''; result=[]; newline='\r\n' if '\r\n' in text else '\n'
@@ -27,7 +28,7 @@ def main():
     if before!=after:
         backup=target.with_name(target.name+'.before-status-button-'+datetime.now().strftime('%Y%m%d-%H%M%S')+'.bak')
         shutil.copy2(target,backup)
-        temp=target.with_suffix('.status.tmp'); temp.write_bytes(after.encode(enc)); temp.replace(target)
+        write_bytes(target,after.encode(enc),'.status.tmp')
     print('Cloud dialogue sections removed; microphone/PTT disabled; local TTS preserved.')
 
 if __name__=='__main__': main()

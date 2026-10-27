@@ -4,7 +4,7 @@ from datetime import datetime
 from pathlib import Path
 import requests, psutil
 from runtime_settings import project_root, simulator_root, documents
-from atomic_io import write_json
+from atomic_io import write_bytes, write_json
 from setup_simulator import main as connect_speech
 
 MANIFEST = 'https://raw.githubusercontent.com/SeriousOldMan/Simulator-Controller/main/VERSION'
@@ -116,7 +116,7 @@ def prepare_config(root, docs):
     text = raw.decode(encoding); after = enable_iracing(text)
     if after != text:
         shutil.copy2(target, target.with_name(target.name + '.before-proxy-' + datetime.now().strftime('%Y%m%d-%H%M%S-%f') + '.bak'))
-        temp = target.with_suffix('.proxy.tmp'); temp.write_bytes(after.encode(encoding)); temp.replace(target)
+        write_bytes(target, after.encode(encoding), '.proxy.tmp')
     installation = folder / 'Simulator Controller.install'
     if (Path(root) / 'chinese-assistant-install.json').is_file() and not installation.exists():
         location = str(Path(root).resolve()).replace('\\', '\\\\').replace('=', '\\=')
